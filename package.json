@@ -1,0 +1,14 @@
+{
+  "name": "autogram-ai-server",
+  "version": "1.0.0",
+  "description": "AutoGram AI — backend для 24/7 автопостинга в Telegram с бесплатным AI",
+  "private": true,
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoGram AI — сервер</title>
+<style>
+:root{--bg:#0e0f13;--surface:#1a1d26;--panel:#16181f;--panel2:#1c1f28;--border:rgba(255,255,255,.08);--border2:rgba(255,255,255,.14);--text:#f4f5f7;--muted:rgba(255,255,255,.55);--faint:rgba(255,255,255,.35);--brand:#229ed9;--brand2:#2b78c2;--green:#22c55e;--amber:#f59e0b;--red:#ef4444;--radius:14px}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:radial-gradient(1100px 560px at 12% -10%,rgba(34,158,217,.18),transparent 60%),var(--bg);color:var(--text);font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+@media(max-width:820px){.app{grid-template-columns:1fr}}
+.sidebar{border-right:1px solid var(--border);background:linear-gradient(180deg,var(--panel),#121319);padding:22px 16px;display:flex;flex-direction:column;gap:6px;position:sticky;top:0;height:100vh}
+@media(max-width:820px){.sidebar{position:static;height:auto;border-right:none;border-bottom:1px solid var(--border);flex-direction:row;flex-wrap:wrap}}
+.brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+.brand .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--brand),var(--brand2));display:grid;place-items:center;font-size:18px}
+.brand b{font-size:15px}.brand span{display:block;font-size:11px;color:var(--faint)}
+.nav-item{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:11px 13px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:.15s}
+.nav-item .ic{font-size:16px;width:20px;text-align:center}
+.nav-item:hover{background:var(--panel2);color:var(--text)}.nav-item.active{background:var(--panel2);color:var(--text);border-color:var(--border2)}
+.nav-spacer{flex:1}
+.side-foot{padding:12px 10px 0;border-top:1px solid var(--border);margin-top:8px;font-size:12px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:99px;background:var(--faint);margin-right:7px}.dot.on{background:var(--green);box-shadow:0 0 8px var(--green)}.dot.off{background:var(--red)}
+.main{padding:30px 34px 60px;min-width:0}@media(max-width:820px){.main{padding:20px 16px 40px}}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.topbar h1{font-size:24px;margin:0;letter-spacing:-.02em}.topbar .sub{color:var(--muted);font-size:13.5px;margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+.card h3{margin:0 0 12px;font-size:15px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:680px){.grid2{grid-template-columns:1fr}}
+.field{margin-bottom:13px}.field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font:inherit;font-size:14px}
+.field textarea{min-height:80px;resize:vertical}.field .hint{font-size:12px;color:var(--faint);margin-top:5px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:9px 16px;border-radius:10px;border:1px solid transparent;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s}
+.btn-primary{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}.btn-primary:hover{filter:brightness(1.08)}
+.btn-ghost{background:var(--panel2);color:var(--text);border-color:var(--border)}.btn-ghost:hover{background:#23262f}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.btn-sm{padding:6px 12px;font-size:12.5px}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.chk{display:flex;align-items:center;gap:9px;font-size:14px;cursor:pointer;margin-bottom:12px}.chk input{width:17px;height:17px;accent-color:var(--brand)}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.badge.green{background:rgba(34,197,94,.15);color:#4ade80}.badge.gray{background:rgba(255,255,255,.08);color:var(--muted)}.badge.amber{background:rgba(245,158,11,.15);color:#fbbf24}.badge.red{background:rgba(239,68,68,.15);color:#f87171}
+.list{display:grid;gap:10px}
+.row-item{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.row-item .name{font-weight:600}.row-item .meta{color:var(--muted);font-size:12.5px;margin-top:2px}
+.logs{display:grid;gap:2px;font-size:13px;font-family:ui-monospace,Menlo,monospace}
+.log{display:grid;grid-template-columns:64px 16px 1fr;gap:10px;padding:7px 10px;border-radius:8px}.log:hover{background:var(--panel2)}.log .t{color:var(--faint)}
+.log .d.ok{color:#4ade80}.log .d.info{color:#5bb8e6}.log .d.warn{color:#fbbf24}.log .d.error{color:#f87171}
+.note{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:13px 16px;border-radius:12px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);margin-bottom:14px;font-size:13.5px}
+.note.blue{background:rgba(34,158,217,.1);border-color:rgba(34,158,217,.25)}.note.red{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.25)}
+.note p{margin:0;color:var(--muted)}.note strong{color:var(--text)}
+.toast{position:fixed;bottom:22px;left:22px;background:var(--panel2);border:1px solid var(--border2);padding:12px 16px;border-radius:12px;font-size:14px;opacity:0;transform:translateY(8px);transition:.25s;z-index:50;max-width:380px}.toast.show{opacity:1;transform:translateY(0)}
+code{background:var(--panel);padding:2px 6px;border-radius:5px;font-size:12.5px}
+.hidden{display:none}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+#offline{position:fixed;inset:0;background:rgba(10,11,15,.92);display:none;place-items:center;z-index:99;padding:20px}
+#offline .box{max-width:520px;background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px}
+#offline h2{margin:0 0 10px}#offline code{display:block;margin:10px 0;padding:10px 12px;background:var(--panel)}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">✈️</div><div><b>AutoGram AI</b><span>сервер · 24/7</span></div></div>
+    <button class="nav-item active" data-v="setup"><span class="ic">⚙️</span> Настройки</button>
+    <button class="nav-item" data-v="control"><span class="ic">🕹</span> Управление</button>
+    <button class="nav-item" data-v="broadcast"><span class="ic">📣</span> Рассылка</button>
+    <button class="nav-item" data-v="logs"><span class="ic">📋</span> Логи</button>
+    <div class="nav-spacer"></div>
+    <div class="side-foot"><span class="dot off" id="dot"></span><span id="connTxt">Не подключено</span></div>
+  </aside>
+  <div class="main">
+    <div class="topbar"><div><h1 id="ttl">Настройки</h1><div class="sub" id="sub">Бот, канал и AI</div></div><div class="btn-row"><span class="badge gray" id="runBadge">Остановлен</span></div></div>
+
+    <section id="v-setup">
+      <div class="card"><h3>🔌 Telegram</h3>
+        <div class="field"><label>Токен бота (@BotFather)</label><input id="f-token" placeholder="123456789:AA..." autocomplete="off"></div>
+        <div class="field"><label>Канал (бот = админ)</label><input id="f-channel" placeholder="@my_channel или -1001234567890"><div class="hint">Для приватного канала используйте числовой ID вида -100...</div></div>
+        <button class="btn btn-ghost" id="btn-test">✓ Проверить подключение</button>
+        <div id="testOut" class="hint" style="margin-top:10px"></div>
+      </div>
+      <div class="card"><h3>✨ AI и контент</h3>
+        <div class="grid2">
+          <div class="field"><label>Тема канала</label><input id="f-topic" placeholder="напр. нейросети и технологии"></div>
+          <div class="field"><label>Интервал постинга (мин)</label><input id="f-interval" type="number" min="1" value="120"></div>
+        </div>
+        <div class="field"><label>Бесплатный AI-провайдер</label>
+          <select id="f-provider"><option value="pollinations">Pollinations — без ключа (по умолчанию)</option><option value="groq">Groq — бесплатный ключ, лучшее качество</option><option value="openai">OpenAI-совместимый (OpenRouter и др.)</option></select>
+        </div>
+        <div id="ai-extra" class="hidden">
+          <div class="field"><label>API-ключ</label><input id="f-aikey" placeholder="вставьте ключ" autocomplete="off"><div class="hint">Groq: бесплатно на console.groq.com</div></div>
+          <div class="grid2" id="openai-extra">
+            <div class="field"><label>Base URL</label><input id="f-aibase" placeholder="https://openrouter.ai/api/v1"></div>
+            <div class="field"><label>Модель</label><input id="f-aimodel" placeholder="напр. meta-llama/llama-3.1-8b-instruct:free"></div>
+          </div>
+        </div>
+        <label class="chk"><input type="checkbox" id="f-img" checked> Добавлять AI-картинку к посту</label>
+        <button class="btn btn-primary" id="btn-save">💾 Сохранить</button>
+      </div>
+    </section>
+
+    <section id="v-control" class="hidden">
+      <div class="note"><div>⏰</div><div><p>Сервер публикует посты <strong>круглосуточно</strong>, даже когда эта страница закрыта. Главное — чтобы работал сам сервер.</p></div></div>
+      <div class="card"><h3>Статус</h3><div id="statusBox">—</div></div>
+      <div class="card"><h3>Управление автопостингом</h3>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-start">▶ Запустить</button>
+          <button class="btn btn-ghost" id="btn-stop">⏹ Остановить</button>
+          <button class="btn btn-ghost" id="btn-now">⚡ Опубликовать сейчас</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="v-broadcast" class="hidden">
+      <div class="note blue"><div>✅</div><div><p><strong>Это легально.</strong> Бот рассылает пригласительную ссылку только в те паблики/группы, <strong>куда его добавили</strong> (ваши и партнёрские). Это не спам. Спам — это писать в чужие паблики без разрешения — так бот технически не умеет и за это банят.</p></div></div>
+      <div class="card"><h3>Добавить паблик (куда бот добавлен)</h3>
+        <div class="field"><input id="f-target" placeholder="@public_chat или -1001234567890"></div>
+        <button class="btn btn-primary btn-sm" id="btn-addtarget">+ Добавить</button>
+      </div>
+      <div class="card"><h3>Паблики для рассылки</h3><div class="list" id="targetsBox"></div></div>
+      <div class="card"><h3>Текст рассылки</h3>
+        <div class="field"><textarea id="f-promo" placeholder="🔥 Подписывайтесь на наш канал — много полезного!"></textarea><div class="hint">Пригласительная ссылка на ваш канал добавится автоматически.</div></div>
+        <button class="btn btn-primary" id="btn-broadcast">📣 Разослать по всем пабликам</button>
+        <div id="bcOut" class="list" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <section id="v-logs" class="hidden">
+      <div class="card"><h3>Логи сервера</h3><div class="logs" id="logsBox"></div></div>
+    </section>
+  </div>
+</div>
+<div id="offline"><div class="box"><h2>⚠️ Сервер не запущен</h2><p class="muted">Эта панель работает только когда запущен сервер. Не открывайте файл panel.html напрямую — вместо этого:</p><code>node server.js</code><p class="muted">и откройте в браузере <strong>http://localhost:3000</strong></p></div></div>
+<div class="toast" id="toast"></div>
+<script>
+(function(){
+  "use strict";
+  var $=function(s){return document.querySelector(s);};
+  var toastEl=$("#toast"),tt;
+  function toast(m){toastEl.textContent=m;toastEl.classList.add("show");clearTimeout(tt);tt=setTimeout(function(){toastEl.classList.remove("show");},3500);}
+  function api(path,body){return fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined}).then(function(r){return r.json();});}
+  var current="setup";
+  var TITLES={setup:["Настройки","Бот, канал и AI"],control:["Управление","Запуск и публикация"],broadcast:["Рассылка по пабликам","Легальный кросспостинг"],logs:["Логи","История действий"]};
+  function show(v){current=v;["setup","control","broadcast","logs"].forEach(function(x){$("#v-"+x).classList.toggle("hidden",x!==v);});
+    document.querySelectorAll(".nav-item").forEach(function(n){n.classList.toggle("active",n.dataset.v===v);});
+    $("#ttl").textContent=TITLES[v][0];$("#sub").textContent=TITLES[v][1];refresh();}
+  document.querySelector(".sidebar").addEventListener("click",function(e){var b=e.target.closest(".nav-item");if(b)show(b.dataset.v);});
+
+  function toggleAiExtra(){var p=$("#f-provider").value;$("#ai-extra").classList.toggle("hidden",p==="pollinations");$("#openai-extra").classList.toggle("hidden",p!=="openai");}
+  $("#f-provider").addEventListener("change",toggleAiExtra);
+
+  function fillForm(c){
+    $("#f-token").value=c.token||"";$("#f-channel").value=c.channelId||"";$("#f-topic").value=c.topic||"";
+    $("#f-interval").value=c.intervalMinutes||120;$("#f-provider").value=c.aiProvider||"pollinations";
+    $("#f-aikey").value=c.aiKey||"";$("#f-aibase").value=c.aiBaseUrl||"";$("#f-aimodel").value=c.aiModel||"";$("#f-img").checked=c.withImage!==false;toggleAiExtra();
+  }
+  function collect(){return{token:$("#f-token").value.trim(),channelId:$("#f-channel").value.trim(),topic:$("#f-topic").value.trim(),intervalMinutes:Number($("#f-interval").value)||120,aiProvider:$("#f-provider").value,aiKey:$("#f-aikey").value.trim(),aiBaseUrl:$("#f-aibase").value.trim(),aiModel:$("#f-aimodel").value.trim(),withImage:$("#f-img").checked};}
+  function esc(s){return String(s==null?"":s).replace(/</g,"&lt;");}
+
+  var loaded=false;
+  function renderTargets(targets){
+    var box=$("#targetsBox");targets=targets||[];
+    if(!targets.length){box.innerHTML='<div class="faint" style="padding:6px">Пока пусто. Добавьте паблик, куда бот добавлен админом.</div>';return;}
+    box.innerHTML=targets.map(function(t){return '<div class="row-item"><div><div class="name">'+esc(t.title)+(t.username?' <span class="faint">@'+esc(t.username)+'</span>':'')+'</div><div class="meta">'+esc(t.chatId)+'</div></div><button class="btn btn-ghost btn-sm" data-rmtarget="'+esc(t.chatId)+'">✕</button></div>';}).join("");
+  }
+  function refresh(){return api("/api/state").then(function(s){
+    $("#offline").style.display="none";
+    if(!loaded){fillForm(s.config);renderTargets(s.config.targets);loaded=true;}
+    else renderTargets(s.config.targets);
+    var dot=$("#dot"),txt=$("#connTxt");
+    if(s.me){dot.className="dot on";txt.textContent="@"+s.me.username;}else{dot.className="dot off";txt.textContent="Не подключено";}
+    var rb=$("#runBadge");rb.className="badge "+(s.running?"green":"gray");rb.textContent=s.running?"Автопостинг вкл (каждые "+s.config.intervalMinutes+" мин)":"Остановлен";
+    $("#statusBox").innerHTML=(s.me?"Бот: <b>@"+esc(s.me.username)+"</b><br>":"Бот не подключён<br>")+"Канал: <b>"+esc(s.config.channelId||"—")+"</b><br>Тема: <b>"+esc(s.config.topic||"(авто)")+"</b><br>AI: <b>"+esc(s.config.aiProvider)+"</b> · пабликов для рассылки: <b>"+(s.config.targets||[]).length+"</b>";
+    $("#logsBox").innerHTML=(s.logs||[]).map(function(l){var d=(l.level==="ok"?"ok":l.level==="error"?"error":l.level==="warn"?"warn":"info");return '<div class="log"><span class="t">'+(l.t||"").slice(11,19)+'</span><span class="d '+d+'">●</span><span>'+esc(l.msg)+'</span></div>';}).join("")||'<div class="faint" style="padding:8px">Пусто</div>';
+    return s;
+  }).catch(function(){$("#offline").style.display="grid";});}
+
+  $("#btn-save").addEventListener("click",function(){api("/api/save",collect()).then(function(){toast("Сохранено 💾");refresh();});});
+  $("#btn-test").addEventListener("click",function(){var b=this;b.disabled=true;$("#testOut").textContent="Проверяю…";api("/api/save",collect()).then(function(){return api("/api/test",{});}).then(function(r){if(r.ok){$("#testOut").innerHTML="✅ Бот @"+esc(r.me.username)+(r.chat?" · канал «"+esc(r.chat.title)+"»":"")+(r.subs!=null?" · "+r.subs+" подп.":"");toast("Подключено ✅");}else{$("#testOut").innerHTML="❌ "+esc(r.error);toast("Ошибка");}b.disabled=false;refresh();}).catch(function(){b.disabled=false;$("#testOut").textContent="Сервер недоступен.";});});
+  $("#btn-start").addEventListener("click",function(){api("/api/start",{}).then(function(){toast("Запущено ▶");refresh();});});
+  $("#btn-stop").addEventListener("click",function(){api("/api/stop",{}).then(function(){toast("Остановлено");refresh();});});
+  $("#btn-now").addEventListener("click",function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin"></span> Публикую…';api("/api/post-now",{}).then(function(r){toast(r.ok?"Опубликовано ✅":"Ошибка: "+r.error);b.disabled=false;b.textContent="⚡ Опубликовать сейчас";refresh();}).catch(function(){b.disabled=false;b.textContent="⚡ Опубликовать сейчас";});});
+  $("#btn-addtarget").addEventListener("click",function(){var v=$("#f-target").value.trim();if(!v){toast("Укажите паблик");return;}var b=this;b.disabled=true;api("/api/target-add",{input:v}).then(function(r){if(r.ok){$("#f-target").value="";renderTargets(r.targets);toast("Паблик добавлен ✅");}else{toast("Ошибка: "+r.error);}b.disabled=false;}).catch(function(){b.disabled=false;});});
+  $("#targetsBox").addEventListener("click",function(e){var el=e.target.closest("[data-rmtarget]");if(!el)return;api("/api/target-remove",{chatId:el.dataset.rmtarget}).then(function(r){renderTargets(r.targets);toast("Удалено");});});
+  $("#btn-broadcast").addEventListener("click",function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin"></span> Рассылаю…';api("/api/broadcast",{promoText:$("#f-promo").value}).then(function(r){
+    b.disabled=false;b.textContent="📣 Разослать по всем пабликам";
+    if(!r.ok){toast("Ошибка: "+r.error);$("#bcOut").innerHTML='<div class="note red"><div>❌</div><div><p>'+esc(r.error)+'</p></div></div>';return;}
+    var ok=r.result.results.filter(function(x){return x.ok;}).length;
+    toast("Разослано: "+ok+"/"+r.result.results.length);
+    $("#bcOut").innerHTML=r.result.results.map(function(x){return '<div class="row-item"><div class="name">'+esc(x.title)+'</div><span class="badge '+(x.ok?"green":"red")+'">'+(x.ok?"✓ отправлено":"✕ "+esc(x.error))+'</span></div>';}).join("");
+    refresh();
+  }).catch(function(){b.disabled=false;b.textContent="📣 Разослать по всем пабликам";});});
+
+  show("setup");
+  setInterval(function(){refresh();},5000);
+})();
+</script>
+</body>
+</html>
