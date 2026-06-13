@@ -17,7 +17,7 @@ let DB = {
     channelId: process.env.CHANNEL_ID || "",
     topic: process.env.TOPIC || "",
     intervalMinutes: Number(process.env.INTERVAL_MINUTES) || 120,
-    withImage: true,
+    withImage: process.env.WITH_IMAGE === "true",
     aiProvider: process.env.AI_PROVIDER || "pollinations",
     aiKey: process.env.AI_KEY || "",
     aiBaseUrl: process.env.AI_BASE_URL || "",
@@ -72,7 +72,14 @@ async function tg(method, params) {
 
 // ---------- AI (бесплатный) ----------
 function fallbackPost(topic) {
-  return "✨ " + topic + "\n\nСегодня разбираем тему «" + topic + "». Коротко, по делу и с пользой.\n\nПодписывайтесь, чтобы не пропустить 🔔\n\n#" + topic.replace(/\s+/g, "") + " #AutoGram";
+  const tag = String(topic).replace(/\s+/g, "");
+  return "✨ " + topic + "\n\n" +
+    "Сегодня — коротко и по делу о теме «" + topic + "».\n\n" +
+    "🔹 Почему это важно: тема набирает популярность.\n" +
+    "🔹 Что стоит знать: главное без воды.\n" +
+    "🔹 Как применить: простые шаги уже сегодня.\n\n" +
+    "🔔 Подписывайтесь, чтобы не пропустить новые посты!\n\n" +
+    "#" + tag + " #интересное";
 }
 
 async function aiText(topic) {
@@ -92,9 +99,11 @@ async function aiText(topic) {
       return data.choices[0].message.content.trim();
     }
     const res = await fetch("https://text.pollinations.ai/" + encodeURIComponent(prompt));
-    const txt = await res.text();
-    if (!txt || txt.trim().length < 20) throw new Error("пустой ответ");
-    return txt.trim();
+    const txt = (await res.text()).trim();
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    if (txt.length < 40) throw new Error("пустой ответ");
+    if (txt[0] === "{" && /\"error\"|deprecat|\"status\"\s*:\s*4/i.test(txt)) throw new Error("лимит/очередь API");
+    return txt;
   } catch (e) {
     log("warn", "AI не сгенерировал текст (" + e.message + "), использую запасной шаблон");
     return fallbackPost(topic);
