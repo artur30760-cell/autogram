@@ -22,15 +22,23 @@ let DB = {
     aiKey: process.env.AI_KEY || "",
     aiBaseUrl: process.env.AI_BASE_URL || "",
     aiModel: process.env.AI_MODEL || "",
+    autoBroadcast: process.env.AUTO_BROADCAST === "true",
+    broadcastIntervalMinutes: Number(process.env.BROADCAST_INTERVAL_MINUTES) || 360,
+    broadcastText: process.env.BROADCAST_TEXT || "",
     targets: [] // паблики/группы для рассылки (куда бот добавлен)
   },
   me: null,
   running: process.env.AUTOSTART === "true",
   lastRun: 0,
+  lastBroadcast: 0,
   logs: []
 };
 try { DB = Object.assign(DB, JSON.parse(fs.readFileSync(DATA_FILE, "utf8"))); } catch (e) {}
 if (!Array.isArray(DB.config.targets)) DB.config.targets = [];
+// Список пабликов из переменной окружения (чтобы переживал перезапуск в облаке)
+if (!DB.config.targets.length && process.env.BROADCAST_TARGETS) {
+  DB.config.targets = process.env.BROADCAST_TARGETS.split(",").map(function (s) { return s.trim(); }).filter(Boolean).map(function (id) { return { chatId: id, title: id, username: id[0] === "@" ? id.slice(1) : "" }; });
+}
 
 function save() { try { fs.writeFileSync(DATA_FILE, JSON.stringify(DB, null, 2)); } catch (e) {} }
 function log(level, msg) {
@@ -74,16 +82,19 @@ async function tg(method, params) {
 function fallbackPost(topic) {
   const tag = String(topic).replace(/\s+/g, "");
   return "✨ " + topic + "\n\n" +
-    "Сегодня — коротко и по делу о теме «" + topic + "».\n\n" +
-    "🔹 Почему это важно: тема набирает популярность.\n" +
-    "🔹 Что стоит знать: главное без воды.\n" +
-    "🔹 Как применить: простые шаги уже сегодня.\n\n" +
+    "Разбираем тему «" + topic + "» — подробно и по делу.\n\n" +
+    "🔹 Почему это важно: тема набирает популярность и затрагивает всё больше людей.\n" +
+    "🔹 Главные факты: собрали самое важное без воды.\n" +
+    "🔹 Частые ошибки: чего стоит избегать новичкам.\n" +
+    "🔹 Как применить: простые шаги, которые можно начать уже сегодня.\n" +
+    "🔹 Лайфхак: маленький совет, который экономит время.\n\n" +
+    "💡 Вывод: начните с малого — и результат придёт быстрее, чем кажется.\n\n" +
     "🔔 Подписывайтесь, чтобы не пропустить новые посты!\n\n" +
-    "#" + tag + " #интересное";
+    "#" + tag + " #интересное #полезное";
 }
 
 async function aiText(topic) {
-  const prompt = "Напиши большой, интересный и полезный пост для Telegram-канала на тему \"" + topic + "\". На русском языке. Структура: цепляющий заголовок с эмодзи, вступление, 3-4 содержательных пункта с эмодзи, призыв подписаться и 3-5 хештегов. Без markdown-разметки, только текст и эмодзи. Объём 1500-2500 знаков.";
+  const prompt = "Напиши большой, подробный и очень полезный пост для Telegram-канала на тему \"" + topic + "\". На русском языке. Структура: цепляющий заголовок с эмодзи; живое вступление на 2-3 предложения; 5-7 содержательных пунктов с эмодзи, в каждом — конкретика, примеры или мини-инструкция (по 2-4 предложения); практический вывод; призыв подписаться и 3-5 хештегов. Пиши живо и по делу, без воды и без markdown-разметки (только текст и эмодзи). Объём 2500-3500 знаков.";
   const p = DB.config.aiProvider || "pollinations";
   try {
     if (p === "groq" || p === "openai") {
@@ -115,6 +126,23 @@ function imageUrl(topic) {
   return "https://image.pollinations.ai/prompt/" + encodeURIComponent(prompt) + "?width=1024&height=768&nologo=true&seed=" + Math.floor(Math.random() * 100000);
 }
 
+// Пробует несколько бесплатных источников картинок по очереди
+async function getImageBuffer(topic) {
+  const seed = Math.floor(Math.random() * 100000);
+  const kw = String(topic).trim().replace(/\s+/g, ",") || "technology";
+  const sources = [
+    imageUrl(topic),
+    "https://loremflickr.com/1024/768/" + encodeURIComponent(kw) + "?lock=" + seed,
+    "https://picsum.photos/seed/" + seed + "/1024/768"
+  ];
+  let lastErr;
+  for (let i = 0; i < sources.length; i++) {
+    try { return await fetchImageBuffer(sources[i], 40000); }
+    catch (e) { lastErr = e; log("warn", "Источник картинки #" + (i + 1) + " не сработал (" + e.message + "), пробую следующий"); }
+  }
+  throw lastErr || new Error("нет доступных источников картинок");
+}
+
 // Скачивает картинку сами (с таймаутом) и возвращает Buffer
 async function fetchImageBuffer(url, ms) {
   const ctrl = new AbortController();
@@ -123,7 +151,7 @@ async function fetchImageBuffer(url, ms) {
     const r = await fetch(url, { signal: ctrl.signal });
     if (!r.ok) throw new Error("HTTP " + r.status);
     const buf = Buffer.from(await r.arrayBuffer());
-    if (buf.length < 1000) throw new Error("слишком маленький файл");
+    if (buf.length < 1000) throw new Error("слишком маленьки�� файл");
     return buf;
   } finally { clearTimeout(timer); }
 }
@@ -143,6 +171,21 @@ async function sendPhotoUpload(chatId, buf, caption) {
   return data.result;
 }
 
+// Отправляет длинный текст, разбивая на части по лимиту Telegram (4096)
+async function sendText(chatId, text) {
+  const LIMIT = 3900;
+  let rest = String(text);
+  while (rest.length) {
+    let chunk = rest.slice(0, LIMIT);
+    if (rest.length > LIMIT) {
+      const cut = chunk.lastIndexOf("\n\n");
+      if (cut > 1000) chunk = chunk.slice(0, cut);
+    }
+    await tg("sendMessage", { chat_id: chatId, text: chunk });
+    rest = rest.slice(chunk.length).replace(/^\s+/, "");
+  }
+}
+
 async function publishPost() {
   const c = DB.config;
   if (!c.channelId) throw new Error("Не указан канал (channelId)");
@@ -153,17 +196,17 @@ async function publishPost() {
   if (c.withImage) {
     try {
       log("info", "Генерирую картинку…");
-      const buf = await fetchImageBuffer(imageUrl(topic), 50000);
+      const buf = await getImageBuffer(topic);
       const caption = text.length <= 1024 ? text : "";
       await sendPhotoUpload(c.channelId, buf, caption);
-      if (!caption) await tg("sendMessage", { chat_id: c.channelId, text: text });
+      if (!caption) await sendText(c.channelId, text);
       imgOk = true;
     } catch (e) {
-      log("warn", "Картинку отправить не удалось (" + e.message + "), публикую без неё");
+      log("warn", "Картинку отправить не ����алось (" + e.message + "), публикую без неё");
     }
   }
   if (!imgOk) {
-    await tg("sendMessage", { chat_id: c.channelId, text: text });
+    await sendText(c.channelId, text);
   }
   log("ok", "✅ Пост опубликован в канал");
 }
@@ -206,9 +249,16 @@ async function broadcast(promoText) {
 // ---------- Планировщик (24/7) ----------
 setInterval(async function () {
   if (!DB.running) return;
-  if (Date.now() - (DB.lastRun || 0) < DB.config.intervalMinutes * 60000) return;
-  DB.lastRun = Date.now(); save();
-  try { await publishPost(); } catch (e) { log("error", "Автопостинг: " + e.message); }
+  // Автопостинг
+  if (Date.now() - (DB.lastRun || 0) >= DB.config.intervalMinutes * 60000) {
+    DB.lastRun = Date.now(); save();
+    try { await publishPost(); } catch (e) { log("error", "Автопостинг: " + e.message); }
+  }
+  // Авторассылка по пабликам (легально — только туда, куда добавлен бот)
+  if (DB.config.autoBroadcast && DB.config.targets.length && Date.now() - (DB.lastBroadcast || 0) >= DB.config.broadcastIntervalMinutes * 60000) {
+    DB.lastBroadcast = Date.now(); save();
+    try { await broadcast(DB.config.broadcastText); log("ok", "📣 Авторассылка выполнена"); } catch (e) { log("error", "Авторассылка: " + e.message); }
+  }
 }, 20000);
 
 // ---------- HTTP API + панель ----------
@@ -224,7 +274,7 @@ const server = http.createServer(async function (req, res) {
       return res.end(html);
     }
     if (u.pathname === "/api/state") {
-      return sendJSON(res, 200, { config: DB.config, me: DB.me, running: DB.running, lastRun: DB.lastRun, logs: DB.logs.slice(0, 60) });
+      return sendJSON(res, 200, { config: DB.config, me: DB.me, running: DB.running, lastRun: DB.lastRun, lastBroadcast: DB.lastBroadcast, logs: DB.logs.slice(0, 60) });
     }
     if (req.method === "POST" && u.pathname === "/api/save") {
       const b = await readBody(req);
@@ -242,7 +292,7 @@ const server = http.createServer(async function (req, res) {
       return sendJSON(res, 200, { ok: true, me: me, chat: chat, subs: subs });
     }
     if (req.method === "POST" && u.pathname === "/api/post-now") { await publishPost(); return sendJSON(res, 200, { ok: true }); }
-    if (req.method === "POST" && u.pathname === "/api/start") { DB.running = true; DB.lastRun = 0; save(); log("ok", "▶ Автопостинг запущен"); return sendJSON(res, 200, { ok: true }); }
+    if (req.method === "POST" && u.pathname === "/api/start") { DB.running = true; DB.lastRun = 0; save(); log("ok", "▶ Автопостинг ��апущен"); return sendJSON(res, 200, { ok: true }); }
     if (req.method === "POST" && u.pathname === "/api/stop") { DB.running = false; save(); log("info", "⏹ Автопостинг остановлен"); return sendJSON(res, 200, { ok: true }); }
     if (req.method === "POST" && u.pathname === "/api/target-add") { const b = await readBody(req); const targets = await addTarget(b.input); return sendJSON(res, 200, { ok: true, targets: targets }); }
     if (req.method === "POST" && u.pathname === "/api/target-remove") { const b = await readBody(req); DB.config.targets = DB.config.targets.filter(function (t) { return String(t.chatId) !== String(b.chatId); }); save(); return sendJSON(res, 200, { ok: true, targets: DB.config.targets }); }
@@ -257,6 +307,7 @@ const server = http.createServer(async function (req, res) {
 server.listen(PORT, function () {
   console.log("AutoGram AI server → http://localhost:" + PORT);
   log("info", "Сервер запущен на порту " + PORT);
+  log("info", "AI-провайдер: " + (DB.config.aiProvider || "pollinations") + (DB.config.aiKey ? " (ключ задан)" : " (без ключа)"));
   if (DB.config.token) {
     tg("getMe").then(function (m) { DB.me = m; save(); log("ok", "Бот подключён: @" + m.username); }).catch(function (e) { log("error", "getMe: " + e.message); });
   }
